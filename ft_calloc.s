@@ -6,65 +6,66 @@ extern __errno_location
 
 section .text
 ft_calloc:
-    ; Prototype : void *ft_calloc(size_t nmemb, size_t size);
-    ; En System V AMD64 ABI :
-    ;   rdi = nmemb
-    ;   rsi = size
-
-    ; Étape 1 : Vérification des arguments nuls (optionnel mais propre, si nmemb == 0 ou size == 0)
+    ; rdi is for nmemb (number of blocks), rsi is for size (size of one block);
+    ; the checks below are to see if rdi == 0 or rsi == 0 ;
+    ; so if nmemb or size are NULL ;
     test rdi, rdi
     jz .return_null
     test rsi, rsi
     jz .return_null
 
-    ; Étape 2 : Détection de l'overflow sur nmemb * size
-    ; On veut vérifier si nmemb * size dépasse la taille max d'un size_t.
-    ; Astuce en assembleur : on utilise l'instruction mul (multiplication non signée).
-    ; 'mul rsi' multiplie rax (qui doit contenir nmemb) par rsi.
-    ; Le résultat est stocké sur 128 bits dans le couple de registres rdx:rax.
-    mov rax, rdi            ; rax = nmemb
-    mul rsi                 ; rdx:rax = nmemb * size
-
-    ; Si rdx est différent de 0, cela signifie que le résultat tient sur plus de 64 bits -> OVERFLOW !
+    ; we do rax * rsi, so nmemb * size, to check for a possible overflow ;
+    ; if there's an overflow, aka result needs more than 64 bits, rdx will != 0 ;
+    mov rax, rdi
+    mul rsi
     cmp rdx, 0
     jne .return_null
 
-    ; Si on arrive ici, rax contient la taille totale propre (nmemb * size) sans overflow.
-    ; On sauvegarde cette taille et d'autres registres pour la suite.
-    push rbx                ; rbx : callee-saved (pour alignement pile 16 octets et sauvegarde)
-    push rax                ; Sauvegarde de la taille totale à allouer
+    ; aligning the stack, then saving nmemb * size in rax ;
+    push rbx
+    push rax
 
-    ; Étape 3 : Allocation de la mémoire avec malloc
-    mov rdi, rax            ; malloc prend sa taille en argument dans rdi
-    call malloc wrt ..plt   ; Appel de malloc (adresse retournée dans rax)
+    ; malloc gets the allocated size from rdi, and return the addr in rax ;
+    ; so we first need to move the size in rdi, as asked by convention System V ;
+    ; which also clean rax so it can receive the addr ;
+    mov rdi, rax
+    call malloc wrt ..plt
 
-    pop rsi                 ; On récupère la taille totale dans rsi (qu'on avait push juste avant)
+    ; rsi also contains nmemb * size ;
+    ; we used the first nmemb * size storage to do the malloc ;
+    ; that second one will be needed for the bzero ;
+    pop rsi
 
-    cmp rax, 0              ; Vérifie si malloc a échoué (retourne NULL)
-    je .malloc_error        ; Si malloc renvoie 0 -> erreur
+    ; check if malloc failed ;
+    cmp rax, 0
+    je .malloc_error
 
-    ; Étape 4 : Initialiser la mémoire allouée à zéro (ft_bzero / memset personnalisé)
-    ; rax contient l'adresse du bloc alloué par malloc.
-    ; On va parcourir chaque octet pour y mettre 0.
-    mov rdi, rax            ; rdi pointe vers le début du bloc
-    mov rcx, rsi            ; rcx = nombre d'octets total (taille)
+    ; we move the starting addr in rdi, and the total size in rcx ;
+    ; so we're giving the begining and ending for bzero loop ;
+    mov rdi, rax
+    mov rcx, rsi
 
+    ; bzero loop. First, exit condition : checking if rcx is at 0, aka if bzero is finished ;
+    ; then we fill with 0, starting from the start, and rcx-- after each 0 is placed ;
+    ; so rcx is used as a decreasing counter here ;
 .loop_zero:
-    test rcx, rcx           ; S'il ne reste plus d'octets à mettre à zéro
-    jz .done                ; On a fini
-    mov byte [rdi + rcx - 1], 0  ; On met l'octet à 0 en partant de la fin
+    test rcx, rcx
+    jz .done
+    mov byte [rdi + rcx - 1], 0
     dec rcx
     jmp .loop_zero
 
+    ; restauring the stack to prev state, then return the starting addr of bzero array ;
 .done:
-    pop rbx                 ; Restaure rbx
-    ret                     ; Retourne le pointeur du bloc initialisé dans rax
-
-.malloc_error:
-    pop rbx                 ; Restaure rbx avant de quitter
-    mov rax, 0              ; Retourne NULL
+    pop rbx
     ret
 
+.malloc_error:
+    pop rbx
+    mov rax, 0
+    ret
+
+    ; xor rax, rax is just an optimized manner to ret 0
 .return_null:
-    xor rax, rax            ; Retourne 0 (NULL)
+    xor rax, rax
     ret
