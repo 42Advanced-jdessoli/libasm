@@ -21,3 +21,5 @@ ft_strcmp:
     movzx rdx, dl ; this is necessary because we must return an int in C, i wouln't be with a char
     sub rax, rdx
     ret
+
+section .note.GNU-stack noalloc noexec nowrite progbits

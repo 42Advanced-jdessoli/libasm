@@ -2,14 +2,14 @@ bits 64
 
 global ft_strdup
 extern ft_strlen
+extern ft_strcpy
 extern malloc
-extern __errno_location
 
 section .text
 ft_strdup:
-    ; those two push are needed because we need to align memory ;
-    ; We have 16 bits, 8 + 8, instead of only 8 bits. This avoid random segfault because of malloc ;
-    push rbx
+    ; On entry rsp % 16 == 8 (the `call` pushed an 8-byte return addr) ;
+    ; ONE push of 8 bytes brings us back to rsp % 16 == 0, which malloc requires ;
+    ; (two pushes would put us back at % 16 == 8 -> misaligned) ;
     push rdi                ; Saving const char *s initial pos on the stack
 
     call ft_strlen          ; loading rax with s len
@@ -17,28 +17,20 @@ ft_strdup:
     inc rax                 ; adding 1 to rax to account for the closing '\0'
     mov rdi, rax            ; moving to rdi the size needed to malloc the str
 
-    call malloc wrt ..plt
+    call malloc wrt ..plt   ; malloc sets errno to ENOMEM itself on failure
 
-    cmp rax, 0              ; checking if malloc failed, so returned 0 / NULL
-    je .malloc_error
+    test rax, rax           ; checking if malloc failed, so returned 0 / NULL
+    jz .malloc_error
 
-    ; if malloc succeeded, it stored in rax the addr of the newly emptied memory ;
-    ; so moving rax content in rdi means making rdi the dest of strcpy ;
-    ; pop get the src ptr out of the stack, and into rsi. So now we have rsi for src ptr, and rdi for dest ptr ;
-    ; push rdi is to save dest ptr on the stack, since calling strcpy will overwrite rdi with the content for rsi ;
+    ; if malloc succeeded, it stored in rax the addr of the new memory ;
+    ; ft_strcpy(dest = rax, src = s) -> it returns dest in rax, which is exactly what we return ;
     mov rdi, rax
-    pop rsi
-    push rdi
-
-    call ft_strcpy
-
-    pop rax                 ; getting the ptr from the stack and storing it into rax ;
-    pop rbx                 ; pop rbx for stack balancing. Huge topic. ;
-    ret
+    pop rsi                 ; src = s. Stack is now back to its entry state ;
+    jmp ft_strcpy           ; tail call : ft_strcpy's `ret` returns straight to our caller ;
 
 .malloc_error:
-    pop rdi                 ; get the const char *s ptr out of the stack
-    pop rbx
-
-    mov rax, 0
+    pop rdi                 ; get the const char *s ptr out of the stack (balance)
+    xor rax, rax            ; return NULL
     ret
+
+section .note.GNU-stack noalloc noexec nowrite progbits

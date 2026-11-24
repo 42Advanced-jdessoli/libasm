@@ -4,8 +4,7 @@ section .text
     global ft_strcpy
 
 ft_strcpy:
-	push rcx
-    mov rcx, 0 ; using rcx for storing index, since we'll need rax for the ret
+    xor rcx, rcx ; using rcx for storing index, since we'll need rax for the ret
     mov rax, rdi ; saving the dest pointer initial pos in ret val
 
 .loop:
@@ -18,5 +17,6 @@ ft_strcpy:
 
 
 .done:
-	pop rcx
     ret
+
+section .note.GNU-stack noalloc noexec nowrite progbits

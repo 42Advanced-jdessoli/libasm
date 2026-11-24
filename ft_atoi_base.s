@@ -135,25 +135,25 @@ ft_atoi_base:
 .convert_init:
     xor     ebx, ebx            ; set ret val at 0
 
-; LEFT TO DO ;
-
+; parse str (rsi + rcx), checks if char (al) is in base ;
+; if so add to ebx, if not or if a \0 is encountered, stops ;
 .convert_loop:
     movzx   eax, byte [r13]
     test    al, al
     jz      .apply_sign
 
-    ; Chercher l'indice du caractère courant dans base
     xor     ecx, ecx            ; index = 0
 .find_digit:
     cmp     ecx, r12d
-    jge     .apply_sign         ; caractère non trouvé dans base -> fin de conversion
+    jge     .apply_sign
     cmp     al, byte [rsi + rcx]
     je      .found_digit
     inc     ecx
     jmp     .find_digit
 
 .found_digit:
-    ; ebx = ebx * r12d + ecx
+    ; we update the accumulator ebx, with the rule for positional changing base ;
+    ; this rule is ebx = base_len + index, so ebx = ebx * r12d + ecx ;
     imul    ebx, r12d
     add     ebx, ecx
     inc     r13
@@ -175,3 +175,5 @@ ft_atoi_base:
     pop     r12
     pop     rbx
     ret
+
+section .note.GNU-stack noalloc noexec nowrite progbits

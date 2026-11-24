@@ -4,11 +4,12 @@ global ft_calloc
 extern malloc
 extern __errno_location
 
+%define ENOMEM 12
+
 section .text
 ft_calloc:
     ; rdi is for nmemb (number of blocks), rsi is for size (size of one block);
     ; the checks below are to see if rdi == 0 or rsi == 0 ;
-    ; so if nmemb or size are NULL ;
     test rdi, rdi
     jz .return_null
     test rsi, rsi
@@ -18,54 +19,47 @@ ft_calloc:
     ; if there's an overflow, aka result needs more than 64 bits, rdx will != 0 ;
     mov rax, rdi
     mul rsi
-    cmp rdx, 0
-    jne .return_null
+    test rdx, rdx
+    jnz .overflow
 
-    ; aligning the stack, then saving nmemb * size in rax ;
-    push rbx
+    ; On entry rsp % 16 == 8. ONE push (8 bytes) -> rsp % 16 == 0, aligned for malloc ;
+    ; it also saves nmemb * size, which malloc would otherwise destroy ;
     push rax
 
     ; malloc gets the allocated size from rdi, and return the addr in rax ;
-    ; so we first need to move the size in rdi, as asked by convention System V ;
-    ; which also clean rax so it can receive the addr ;
     mov rdi, rax
     call malloc wrt ..plt
 
-    ; rsi also contains nmemb * size ;
-    ; we used the first nmemb * size storage to do the malloc ;
-    ; that second one will be needed for the bzero ;
+    ; rsi now gets back nmemb * size for the bzero part ;
     pop rsi
 
-    ; check if malloc failed ;
-    cmp rax, 0
-    je .malloc_error
+    ; check if malloc failed (malloc already set errno) ;
+    test rax, rax
+    jz .return
 
-    ; we move the starting addr in rdi, and the total size in rcx ;
-    ; so we're giving the begining and ending for bzero loop ;
+    ; rdi = start addr, rcx = total size ;
     mov rdi, rax
     mov rcx, rsi
 
-    ; bzero loop. First, exit condition : checking if rcx is at 0, aka if bzero is finished ;
-    ; then we fill with 0, starting from the start, and rcx-- after each 0 is placed ;
-    ; so rcx is used as a decreasing counter here ;
+    ; bzero loop. rcx is used as a decreasing counter ;
 .loop_zero:
     test rcx, rcx
-    jz .done
+    jz .return
     mov byte [rdi + rcx - 1], 0
     dec rcx
     jmp .loop_zero
 
-    ; restauring the stack to prev state, then return the starting addr of bzero array ;
-.done:
-    pop rbx
-    ret
-
-.malloc_error:
-    pop rbx
-    mov rax, 0
-    ret
+.overflow:
+    ; nmemb * size does not fit in 64 bits -> errno = ENOMEM, return NULL ;
+    sub rsp, 8                      ; align for the call
+    call __errno_location wrt ..plt
+    add rsp, 8
+    mov dword [rax], ENOMEM
 
     ; xor rax, rax is just an optimized manner to ret 0
 .return_null:
     xor rax, rax
+.return:
     ret
+
+section .note.GNU-stack noalloc noexec nowrite progbits
